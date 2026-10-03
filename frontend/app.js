@@ -105,6 +105,71 @@ function connectWS() {
 /* ---------------- voice capture ---------------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, finalText = "";
+
+function extractVoiceQty(text) {
+  const t = text.toLowerCase().trim();
+
+  const numbers = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "ek": 1,
+    "do": 2,
+    "teen": 3,
+    "char": 4,
+    "chaar": 4,
+    "paanch": 5,
+    "panch": 5,
+    "एक": 1,
+    "दो": 2,
+    "तीन": 3,
+    "चार": 4,
+    "पांच": 5,
+    "पाँच": 5,
+    "ondu": 1,
+    "eradu": 2,
+    "mooru": 3,
+    "naalku": 4,
+    "aidu": 5,
+    "too":2,
+    "to":2,
+    "TO":2
+  };
+
+  // Prefer quantities that appear directly before a quantity unit.
+  const unitPattern =
+    "(?:packet|packets|pack|piece|pieces|bottle|bottles|box|boxes|kg|kilo|gram|grams|g|ml|litre|liter|litres|liters|ltr|l)";
+
+  const words = Object.keys(numbers)
+    .sort((a, b) => b.length - a.length)
+    .join("|");
+
+  const wordMatch = t.match(
+    new RegExp(`\\b(${words})\\b\\s*${unitPattern}\\b`, "i")
+  );
+
+  if (wordMatch) {
+    return numbers[wordMatch[1].toLowerCase()];
+  }
+
+  const digitMatch = t.match(
+    new RegExp(`\\b(\\d{1,2})\\s*${unitPattern}\\b`, "i")
+  );
+
+  if (digitMatch) {
+    return Number(digitMatch[1]);
+  }
+
+  return null;
+}
+
 function startRec() {
   if (!SR) { toast("Voice needs Chrome/Edge — type the item below instead."); $("#typein")?.focus(); return; }
   finalText = ""; state.interim = "";
@@ -129,14 +194,24 @@ function startRec() {
 }
 function stopRec() { if (rec && state.recording) rec.stop(); }
 
-async function submitAsk(text, productId) {
+async function submitAsk(text, productId, qty = null) {
   try {
-    const r = await api("/asks", { shop_id: state.shopId, text, product_id: productId || null });
+    const detectedQty = qty ?? extractVoiceQty(text);
+
+    const r = await api("/asks", {
+      shop_id: state.shopId,
+      text,
+      product_id: productId || null,
+      qty: detectedQty
+    });
+
     state.lastResult = r;
     state.asks = [r.ask, ...state.asks.filter((a) => a.id !== r.ask.id)];
     state.summary = await api(`/shops/${state.shopId}/summary`);
     render();
-  } catch (e) { toast("⚠️ " + esc(e.message)); }
+  } catch (e) {
+    toast("⚠️ " + esc(e.message));
+  }
 }
 
 /* ---------------- map ---------------- */
